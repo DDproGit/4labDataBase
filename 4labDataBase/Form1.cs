@@ -80,59 +80,81 @@ namespace _4labDataBase
                 return;
 
             }
-            /*SqlCommand transact = new SqlCommand("begin transaction", connection);
-            transact.ExecuteReader();*/
+            SqlTransaction transaction = connection.BeginTransaction();
             SqlCommand cmd0 = new SqlCommand("Select Name, DateFile from Files", connection);
-            SqlDataReader reader = cmd0.ExecuteReader();
+            cmd0.Transaction = transaction;
+            SqlCommand cmd1 = new SqlCommand("Select Name, DateFile from Files", connection);
+            cmd1.Transaction = transaction;
+            SqlDataReader reader = cmd1.ExecuteReader();
+
             if (reader.HasRows)
             {
-                while (reader.Read())
+                try
                 {
-                    string chck = path + @"\" + reader["Name"];
-                    if (System.IO.File.Exists(path + @"\" + reader["Name"]))
+                    while (reader.Read())
                     {
-                        string filePath = path + @"\" + reader["Name"];
-                        string fileName = System.IO.Path.GetFileName(filePath);
-                        System.DateTime date_file = System.IO.File.GetLastWriteTime(filePath);
-                        System.DateTime date_db = (System.DateTime)reader["DateFile"];
-                        if (new SqlDateTime(date_file) != date_db)
+                        string chck = path + @"\" + reader["Name"];
+                        if (System.IO.File.Exists(path + @"\" + reader["Name"]))
                         {
-                            SqlCommand cmd1 = new SqlCommand("update Files set DateFile = @date where Name = @name", connection);
-                            cmd1.Parameters.AddWithValue("date", date_file);
-                            cmd1.Parameters.AddWithValue("name", fileName);
-                            upd = upd + 1;
-                            cmd1.ExecuteNonQuery();
+                            string filePath = path + @"\" + reader["Name"];
+                            string fileName = System.IO.Path.GetFileName(filePath);
+                            System.DateTime date_file = System.IO.File.GetLastWriteTime(filePath);
+                            System.DateTime date_db = (System.DateTime)reader["DateFile"];
+                            if (new SqlDateTime(date_file) != date_db)
+                            {
+                                cmd0.CommandText = "update Files set DateFile = @date where Name = @name";
+                                cmd0.Parameters.Clear();
+                                cmd0.Parameters.AddWithValue("date", date_file);
+                                cmd0.Parameters.AddWithValue("name", fileName);
+                                upd = upd + 1;
+                                cmd0.ExecuteNonQuery();
+                            }
+                        }
+                        else
+                        {
+                            cmd0.CommandText = "delete from Files where Name = @f_name";
+                            cmd0.Parameters.Clear();
+                            cmd0.Parameters.AddWithValue("f_name", reader["Name"]);
+                            del = del + 1;
+                            cmd0.ExecuteNonQuery();
+                            //cmd1.ExecuteReader();
                         }
                     }
-                    else
-                    {
-                        SqlCommand cmd1 = new SqlCommand("delete from Files where Name = @f_name", connection);
-                        cmd1.Parameters.AddWithValue("f_name", reader["Name"]);
-                        del = del + 1;
-                        cmd1.ExecuteNonQuery();
-                        //cmd1.ExecuteReader();
-                    }
+                }
+                catch
+                {
+                    MessageBox.Show("Something wrong!");
+                    transaction.Rollback();
+                    return;
                 }
             }
-            foreach (string filePath in System.IO.Directory.GetFiles(path))
+            reader.Close();
+            transaction.Commit();
+            transaction = connection.BeginTransaction();
+            cmd0.Transaction = transaction;
+            try
             {
-                string fileName = System.IO.Path.GetFileName(filePath);
-                System.DateTime date_file = System.IO.File.GetLastWriteTime(filePath);
-                SqlCommand cmd1 = new SqlCommand("if not exists (select Name from Files where Name = @f_name) insert into Files(Name, DateFile) values (@f_name, @f_date)", connection);
-                /*SqlCommand cmd1 = new SqlCommand("if not exists (select Name from Files where Name = @f_name) begin " +
-                    "insert into Files(Name, DateFile) values (@f_name, @f_date)" +
-                    "select * from Files where Name = @f_name " +
-                    "end", connection);*/
-                cmd1.Parameters.AddWithValue("f_name", fileName);
-                cmd1.Parameters.AddWithValue("f_date", date_file);
-                //cmd1.ExecuteNonQuery();
-                //ins = ins + (int)cmd1.ExecuteScalar();
-                int check = cmd1.ExecuteNonQuery();
-                if (check > 0)
-                    ins = ins + check;
+                foreach (string filePath in System.IO.Directory.GetFiles(path))
+                {
+                    string fileName = System.IO.Path.GetFileName(filePath);
+                    System.DateTime date_file = System.IO.File.GetLastWriteTime(filePath);
+                    cmd0.CommandText = "if not exists (select Name from Files where Name = @f_name) insert into Files(Name, DateFile) values (@f_name, @f_date)";
+                    //SqlCommand cmd1 = new SqlCommand("if not exists (select Name from Files where Name = @f_name) insert into Files(Name, DateFile) values (@f_name, @f_date)", connection);
+                    cmd0.Parameters.Clear();
+                    cmd0.Parameters.AddWithValue("f_name", fileName);
+                    cmd0.Parameters.AddWithValue("f_date", date_file);
+                    int check = cmd0.ExecuteNonQuery();
+                    if (check > 0)
+                        ins = ins + check;
+                }
+                transaction.Commit();
             }
-            /*transact.CommandText = "commit";
-            transact.ExecuteNonQuery();*/
+            catch
+            {
+                MessageBox.Show("Something wrong2!");
+                transaction.Rollback();
+                return;
+            }
             connection.Close();
             MessageBox.Show("Изменено: " + upd.ToString() + "; удалено: " + del.ToString() + "; вставлено: " + ins.ToString());
         }
